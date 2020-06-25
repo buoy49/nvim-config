@@ -36,7 +36,7 @@ Other dependencies:
 
 To install, run
 
-    $ git clone git://github.com/gacha/nvim-config.git ~/.config/nvim
+    $ git clone git://github.com/buoy49/nvim-config.git ~/.config/nvim
     $ mkdir ~/.config/nvim/swap && mkdir ~/.config/nvim/undo
     $ curl -fLo ~/.config/nvim/autoload/plug.vim --create-dirs \
     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim

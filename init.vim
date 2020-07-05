@@ -31,11 +31,10 @@ Plug 'tpope/vim-haml', { 'for': ['haml'] }
 Plug 'slim-template/vim-slim', { 'for': ['slim'] }
 Plug 'tomtom/tcomment_vim'
 Plug 'nelstrom/vim-textobj-rubyblock', { 'for': ['ruby'] }
-  Plug 'kana/vim-textobj-user', { 'for': ['ruby'] }
+Plug 'kana/vim-textobj-user', { 'for': ['ruby'] }
 Plug 'thinca/vim-localrc'
 Plug 'jgdavey/vim-blockle'
 Plug 'othree/eregex.vim'
-Plug 'wakatime/vim-wakatime'
 Plug 'othree/html5.vim'
 Plug 'xolox/vim-misc'
 Plug 'xolox/vim-notes'
@@ -137,6 +136,10 @@ let g:grammarous#default_comments_only_filetypes = {
 map <Leader>e :e <C-R>=escape(expand("%:p:h"),' ') . '/'<CR>
 map <Leader>s :split <C-R>=escape(expand("%:p:h"), ' ') . '/'<CR>
 map <Leader>v :vnew <C-R>=escape(expand("%:p:h"), ' ') . '/'<CR>
+nnoremap <C-J> <C-W><C-J>
+nnoremap <C-K> <C-W><C-K>
+nnoremap <C-L> <C-W><C-L>
+nnoremap <C-H> <C-W><C-H>
 
 " EasyMotion
 nmap s <Plug>(easymotion-s2)
@@ -312,8 +315,9 @@ if executable('ag')
 endif
 
 " Use deoplete.
+let g:python3_host_prog = "/usr/local/bin/python3"
 let g:deoplete#enable_at_startup = 1
-let g:deoplete#auto_complete_start_length = 2
+call deoplete#custom#option({'auto_complete_start_length': 2})
 call deoplete#custom#source('_', 'max_candidates', 3)
 call deoplete#custom#source('buffer', 'rank', 501)
 call deoplete#custom#source('buffer', 'max_candidates', 2)
@@ -507,4 +511,7 @@ endfunction
 if $VIM_CRONTAB == "true"
     set nobackup
     set nowritebackup
-endif
+  endif
+
+set path=$PWD/**
+

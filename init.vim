@@ -73,6 +73,10 @@ call plug#end()
 set termguicolors " true colors
 set exrc " loads project spedific .nvimrc
 
+let uname = substitute(system('uname'), '\n', '', '')
+" Example values: Linux, Darwin, MINGW64_NT-10.0, MINGW32_NT-6.1
+
+
 "-----------------------
 """""""""""""""""""""""""
 " KEYBINDINGS
@@ -315,7 +319,12 @@ if executable('ag')
 endif
 
 " Use deoplete.
-let g:python3_host_prog = "/usr/local/bin/python3"
+if uname == 'Linux'
+  let g:python3_host_prog = "/usr/bin/python3"
+endif
+if uname == 'Darwin'
+  let g:python3_host_prog = "/usr/local/bin/python3"
+endif
 let g:deoplete#enable_at_startup = 1
 call deoplete#custom#option({'auto_complete_start_length': 2})
 call deoplete#custom#source('_', 'max_candidates', 3)
@@ -379,25 +388,17 @@ let g:neomake_ruby_reek_maker = {
     \ 'args': ['--single-line'],
     \ 'errorformat': g:neomake_ruby_reek_maker_errorformat,
     \ }
-let b:neomake_ruby_rubocop_exe = "~/.rvm/gems/ruby-2.5.3/bin/rubocop"
+
+if uname == 'Linux'
+  let b:neomake_ruby_rubocop_exe = "~/.rbenv/shims/rubocop"
+endif
+if uname == 'Darwin'
+  let b:neomake_ruby_rubocop_exe = "~/.rvm/gems/ruby-2.5.3/bin/rubocop"
+endif
 let g:neomake_ruby_enabled_makers = ['mri', 'rubocop']
 let g:neomake_javascript_enabled_makers = ['eslint']
 let g:neomake_serialize = 1
 let g:neomake_serialize_abort_on_error = 1
-
-function! MyOnBattery()
-  if filereadable('/usr/bin/pmset')
-    silent exe "!pmset -g batt | grep discharging"
-    return !v:shell_error
-  else
-    return readfile('/sys/class/power_supply/AC/online') == ['0']
-  endif
-endfunction
-if MyOnBattery()
-  call neomake#configure#automake('w')
-else
-  call neomake#configure#automake('inrw', 1000)
-endif
 
 " Neoterm
 let g:neoterm_clear_cmd = "clear; printf '=%.0s' {1..80}; clear"
@@ -513,5 +514,107 @@ if $VIM_CRONTAB == "true"
     set nowritebackup
   endif
 
-set path=$PWD/**
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" RUNNING TESTS
+"
+" Test running here is contextual in two different ways:
+"
+" 1. It will guess at how to run the tests. E.g., if there's a Gemfile
+"    present, it will `bundle exec rspec` so the gems are respected.
+"
+" 2. It remembers which tests have been run. E.g., if I'm editing user_spec.rb
+"    and hit enter, it will run rspec on user_spec.rb. If I then navigate to a
+"    non-test file, like routes.rb, and hit return again, it will re-run
+"    user_spec.rb. It will continue using user_spec.rb as my 'default' test
+"    until I hit enter in some other test file, at which point that test file
+"    is run immediately and becomes the default. This is complex to describe
+"    fully, but simple to use in practice: always hit enter to run tests. It
+"    will run either the test file you're in or the last test file you hit
+"    enter in.
+"
+" 3. Sometimes you want to run just one test. For that, there's <leader>T,
+"    which passes the current line number to the test runner. RSpec knows what
+"    to do with this (it will run the first test it finds at or below the
+"    given line number). It probably won't work with other test runners.
+"    'Focusing' on a single test in this way will be remembered if you hit
+"    enter from non-test files, as described above.
+"
+" 4. Sometimes you don't want contextual test running. In that case, there's
+"    <leader>a, which runs everything.
+"
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! MapCR()
+  nnoremap <cr> :call RunTestFile()<cr>
+endfunction
+call MapCR()
+nnoremap <leader>T :call RunNearestTest()<cr>
+nnoremap <leader>a :call RunTests('')<cr>
+
+function! RunTestFile(...)
+    if a:0
+        let command_suffix = a:1
+    else
+        let command_suffix = ""
+    endif
+
+    " Are we in a test file?
+    let in_test_file = match(expand("%"), '\(_spec.rb\|_test.rb\|test_.*\.py\|_test.py\|.test.ts\|.test.ts\)$') != -1
+
+    " Run the tests for the previously-marked file (or the current file if
+    " it's a test).
+    if in_test_file
+        call SetTestFile(command_suffix)
+    elseif !exists("t:grb_test_file")
+        return
+    end
+    call RunTests(t:grb_test_file)
+endfunction
+
+function! RunNearestTest()
+    let spec_line_number = line('.')
+    call RunTestFile(":" . spec_line_number)
+endfunction
+
+function! SetTestFile(command_suffix)
+    " Set the spec file that tests will be run for.
+    let t:grb_test_file=@% . a:command_suffix
+endfunction
+
+function! RunTests(filename)
+    " Write the file and run tests for the given filename
+    if expand("%") != ""
+      :w
+    end
+    " The file is executable; assume we should run
+    if executable(a:filename)
+      exec ":!./" . a:filename
+    " Project-specific test script
+    elseif filereadable("bin/test")
+      exec ":!bin/test " . a:filename
+    " Rspec binstub
+    elseif filereadable("bin/rspec")
+      exec ":!bin/rspec " . a:filename
+    " Fall back to the .test-commands pipe if available, assuming someone
+    " is reading the other side and running the commands
+    elseif filewritable(".test-commands")
+      let cmd = 'rspec --color --format progress --require "~/lib/vim_rspec_formatter" --format VimFormatter --out tmp/quickfix'
+      exec ":!echo " . cmd . " " . a:filename . " > .test-commands"
+
+      " Write an empty string to block until the command completes
+      sleep 100m " milliseconds
+      :!echo > .test-commands
+      redraw!
+    " Fall back to a blocking test run with Bundler
+    elseif filereadable("bin/rspec")
+      exec ":!bin/rspec --color " . a:filename
+    elseif filereadable("Gemfile") && strlen(glob("spec/**/*.rb"))
+      exec ":!bundle exec rspec --color " . a:filename
+    elseif filereadable("Gemfile") && strlen(glob("test/**/*.rb"))
+      exec ":!bin/rails test " . a:filename
+    " If we see python-looking tests, assume they should be run with Nose
+    elseif strlen(glob("test/**/*.py") . glob("tests/**/*.py"))
+      exec "!nosetests " . a:filename
+    end
+endfunction
 
